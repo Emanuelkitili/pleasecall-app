@@ -1,40 +1,47 @@
-from flask import Flask, request, render_template_string
-import africastalking
-import os
+from flask import Flask, request
 
 app = Flask(__name__)
 
-# Africa's Talking setup
-username = os.environ.get("AT_USERNAME", "sandbox")
-api_key = os.environ.get("AT_API_KEY", "atsk_xxx")
-africastalking.initialize(username, api_key)
-sms = africastalking.SMS
-
-HTML = """
-<h2>Please Call Me App</h2>
-<form method="POST" action="/pleasecall">
-  Namba ya kumtumia: <input name="phone" placeholder="0712345678"><br><br>
-  Namba yako: <input name="from" placeholder="0700000000"><br><br>
-  <button type="submit">Tuma Please Call</button>
-</form>
-"""
+# Ujumbe wa mwisho
+last_msg = "Mum nipigie sina credit, nataka chakula"
 
 @app.route('/')
 def home():
-    return render_template_string(HTML)
+    return f"""
+    <h2>🎤 PleaseCall VOICE - Live</h2>
+    <p>App iko sawa! Voice message: <b>{last_msg}</b></p>
+    <form method="POST" action="/set">
+        <label>Namba ya Mum: <input name="to" value="0722..." required></label><br><br>
+        <label>Ujumbe wa sauti:</label><br>
+        <select name="msg">
+            <option>Mum nipigie sina credit, nataka chakula</option>
+            <option>Mum niko danger, nipigie haraka</option>
+            <option>Baba niko shambani, niletee maji</option>
+        </select><br><br>
+        <button type="submit">Mpigie Sasa</button>
+    </form>
+    <p><a href="/voice" target="_blank">Test Sauti (Voice XML)</a></p>
+    """
 
-@app.route('/pleasecall', methods=['POST'])
-def pleasecall():
-    phone_to = request.form.get('phone')
-    phone_from = request.form.get('from', '0700000000')
-    if not phone_to:
-        return "Weka namba!"
-    try:
-        msg = f"Please call me. From {phone_from}"
-        response = sms.send(msg, [phone_to])
-        return f"Imetumwa kwa {phone_to}! {response}"
-    except Exception as e:
-        return f"Error: {e}"
+@app.route('/set', methods=['POST'])
+def set_msg():
+    global last_msg
+    to = request.form.get("to")
+    msg = request.form.get("msg")
+    last_msg = msg
+    # Hapa baadaye tutaongeza voice.call(to)
+    return f"<h3>✅ Sawa! Tutampigia {to} akisikia: '{msg}'</h3><a href='/'>Rudi nyuma</a>"
+
+@app.route('/voice', methods=['GET','POST'])
+def voice():
+    # Hii ndio Mum atasikia akipokea simu
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="woman" playBeep="false">{last_msg}</Say>
+    <Say>Please call back your child immediately.</Say>
+    <Hangup/>
+</Response>"""
+    return xml, 200, {'Content-Type': 'text/xml'}
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run()
