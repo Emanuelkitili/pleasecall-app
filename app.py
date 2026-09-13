@@ -1,47 +1,52 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
+import africastalking
+import os
 
 app = Flask(__name__)
 
-# Ujumbe wa mwisho
-last_msg = "Mum nipigie sina credit, nataka chakula"
+# --- CONFIG YAKO YA 2 BOB ---
+YOUR_MPESA_NUMBER = "0701295634"
+PRICE_TOTAL = 2  # Comrade analipa 2
+YOUR_CUT = 1     # 1 kwako
+CALL_COST = 1    # 1 kwa call
+
+# Africa's Talking - weka keys zako hapa
+AT_USERNAME = "sandbox" # badilisha ukiwa live
+AT_API_KEY = "your_api_key_hapa"
+africastalking.initialize(AT_USERNAME, AT_API_KEY)
+voice = africastalking.Voice
 
 @app.route('/')
 def home():
-    return f"""
-    <h2>🎤 PleaseCall VOICE - Live</h2>
-    <p>App iko sawa! Voice message: <b>{last_msg}</b></p>
-    <form method="POST" action="/set">
-        <label>Namba ya Mum: <input name="to" value="0722..." required></label><br><br>
-        <label>Ujumbe wa sauti:</label><br>
-        <select name="msg">
-            <option>Mum nipigie sina credit, nataka chakula</option>
-            <option>Mum niko danger, nipigie haraka</option>
-            <option>Baba niko shambani, niletee maji</option>
-        </select><br><br>
-        <button type="submit">Mpigie Sasa</button>
-    </form>
-    <p><a href="/voice" target="_blank">Test Sauti (Voice XML)</a></p>
-    """
+    return "PleaseCall App Iko Live! 2 bob = 1 kwako + 1 call"
 
-@app.route('/set', methods=['POST'])
-def set_msg():
-    global last_msg
-    to = request.form.get("to")
-    msg = request.form.get("msg")
-    last_msg = msg
-    # Hapa baadaye tutaongeza voice.call(to)
-    return f"<h3>✅ Sawa! Tutampigia {to} akisikia: '{msg}'</h3><a href='/'>Rudi nyuma</a>"
+@app.route('/call', methods=['POST'])
+def make_call():
+    data = request.get_json()
+    mum_number = data.get('mum_number') # namba ya kabambe
+    message = data.get('message', 'Mum ni mimi, tafadhali nipigie')
+    amount_paid = data.get('amount', 2) # tumeshapokea 2 bob?
 
-@app.route('/voice', methods=['GET','POST'])
-def voice():
-    # Hii ndio Mum atasikia akipokea simu
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="woman" playBeep="false">{last_msg}</Say>
-    <Say>Please call back your child immediately.</Say>
-    <Hangup/>
-</Response>"""
-    return xml, 200, {'Content-Type': 'text/xml'}
+    # LOGIC YA 2 BOB
+    if amount_paid >= PRICE_TOTAL:
+        print(f"Pesa imeingia! {YOUR_CUT} bob kwenda kwa {YOUR_MPESA_NUMBER}")
+        
+        # Piga call sasa
+        try:
+            # Hii ndio itapigia mum
+            response = voice.call(
+                callFrom="+254...AT_NUMBER_YAKO",
+                callTo=[mum_number]
+            )
+            return jsonify({
+                "status": "success",
+                "message": f"Asante comrade! Call inaenda kwa {mum_number}. 1 bob kwako imebaki!",
+                "your_profit": YOUR_CUT
+            })
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)})
+    else:
+        return jsonify({"status": "failed", "message": "Tuma 2 bob kwanza"})
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
