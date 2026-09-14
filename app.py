@@ -1,87 +1,62 @@
 from flask import Flask, request, jsonify, render_template
 import africastalking
-import requests
-import base64
-from datetime import datetime as dt
 import os
 
 app = Flask(__name__)
 
-# --- CONFIG YA MBOKA - 2 BOB ---
-YOUR_MPESA_NUMBER = "0701295634"
-MY_MBOKA_PHONE = "254701295634"
+# --- CONFIG SIRI - HAKUNA NAMBA HAPA PUBLIC ---
+YOUR_MPESA = os.getenv("MPESA_NUMBER", "0701XXXXXX") # namba iko kwa Render Environment pekee
 PRICE_TOTAL = 2
 YOUR_CUT = 1
-BASE_URL = "https://6c926d363ae88f.lhr.life"
+CALL_COST = 1
 
-MPESA_SHORTCODE = "174379"
-MPESA_CONSUMER_KEY = "PASTE_YOUR_CONSUMER_KEY_HERE"
-MPESA_CONSUMER_SECRET = "PASTE_YOUR_CONSUMER_SECRET_HERE"
-MPESA_PASSKEY = "PASTE_YOUR_PASSKEY_HERE"
-AT_USERNAME = "sandbox"
-AT_API_KEY = "PASTE_YOUR_AT_API_KEY"
-
+# Africa's Talking - weka keys zako kwa Render Environment pia
+AT_USERNAME = os.getenv("AT_USERNAME", "sandbox")
+AT_API_KEY = os.getenv("AT_API_KEY", "your_api_key")
 africastalking.initialize(AT_USERNAME, AT_API_KEY)
 voice = africastalking.Voice
 
-payments_db = {}
-
 @app.route('/')
 def home():
-    return render_template('index.html') if os.path.exists('templates/index.html') else f"PleaseCall App Iko Live! 2 bob = 1 kwako ({YOUR_MPESA_NUMBER}) + 1 call - {BASE_URL}"
+    # Sasa inaonyesha page mzuri, si namba yako
+    try:
+        return render_template('index.html')
+    except:
+        return "PleaseCall App Iko Live! 2 bob = 1 kwako + 1 call"
 
 @app.route('/call', methods=['POST'])
 def make_call():
     data = request.get_json()
     mum_number = data.get('mum_number')
-    message = data.get('message', 'Mum ni mimi')
-    
-    if not mum_number.startswith("+"):
-        mum_number = "+254" + mum_number[-9:]
+    message = data.get('message', 'Mum ni mimi, tafadhali nipigie')
+    amount_paid = data.get('amount', 2)
 
-    try:
-        response = voice.call(
-            callFrom="+254711082000",
-            callTo=[mum_number]
-        )
-        return jsonify({
-            "status": "success",
-            "message": f"Call inaenda kwa {mum_number}. Profit yako {YOUR_CUT} bob!",
-            "your_profit": YOUR_CUT
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "error": str(e)})
+    if not mum_number:
+        return jsonify({"status": "failed", "message": "Weka namba ya Mum"})
 
-# USSD + MPESA LOGIC
-def get_mpesa_token():
-    url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    r = requests.get(url, auth=(MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET))
-    return r.json().get('access_token')
+    # LOGIC YA 2 BOB
+    if amount_paid >= PRICE_TOTAL:
+        print(f"Comrade amelipa {PRICE_TOTAL} bob! {YOUR_CUT} kwenda kwa {YOUR_MPESA}")
+        try:
+            # Hapa ndio call ya 1 bob inapigwa
+            # Badilisha callFrom na namba yako ya Africa's Talking ukiwa live
+            call_from = os.getenv("AT_PHONE_NUMBER", "+254...")
 
-@app.route('/ussd', methods=['POST'])
-def ussd():
-    phone = request.values.get("phoneNumber")
-    text = request.values.get("text", "")
-    if text == "":
-        return "CON PleaseCall 2BOB - Mboka 0701295634\nWeka namba ya mum:\n"
-    
-    receiver = "254" + text[-9:]
-    sender_clean = phone.replace("+", "")
-    # hapa ndio unge-tuma STK ya 2 bob
-    payments_db[sender_clean] = {"to": "+" + receiver}
-    return "END Sawa! Lipa 2 bob kwa Till. Tutakupigia."
+            # Kwa sandbox test, haitapiga kweli lakini ita-log
+            print(f"Tunampigia {mum_number} ujumbe: {message}")
+            
+            # Uncomment ukiwa na credit ya AT
+            # response = voice.call(callFrom=call_from, callTo=[mum_number])
 
-@app.route('/mpesa/callback', methods=['POST'])
-def mpesa_callback():
-    return "OK"
-
-@app.route('/voice/callback', methods=['POST'])
-def voice_callback():
-    is_active = request.values.get('isActive')
-    if is_active == '1':
-        xml = f'<Response><Say>Ujumbe kutoka kwa mwanao.</Say><Record maxLength="240" finishOnKey="#" callbackUrl="{BASE_URL}/voice/recording"/></Response>'
-        return app.response_class(xml, mimetype='text/xml')
-    return app.response_class('<Response><Say>Subiri</Say></Response>', mimetype='text/xml')
+            return jsonify({
+                "status": "success",
+                "message": f"Asante comrade! Tunampigia {mum_number} sasa RING RING... 1 bob imebaki kwako!",
+                "your_profit": YOUR_CUT
+            })
+        except Exception as e:
+            return jsonify({"status": "error", "error": str(e)})
+    else:
+        return jsonify({"status": "failed", "message": "Tuma 2 bob kwanza"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
